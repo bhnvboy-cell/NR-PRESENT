@@ -1,5 +1,7 @@
 # NR Presentation
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A Canva / Google-Slides-style presentation editor for the web — React + Konva on the front, a .NET 10 + PostgreSQL API on the back. Build slides with real design tooling (charts, tables, icons, animations), present with speaker view, export to PNG/PDF/PowerPoint, and share read-only links with cloud accounts.
 
 ## Features
