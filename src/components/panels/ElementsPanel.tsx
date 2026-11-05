@@ -3,7 +3,8 @@ import { useEditorStore } from '../../store/editorStore';
 import { useCanvasUi } from '../../store/canvasUi';
 import { ICONS, ICON_CATEGORIES, iconToDataUrl, type IconDef } from '../../data/icons';
 import { GRAPHICS, GRAPHIC_CATEGORIES, graphicToDataUrl, EMOJIS, type GraphicDef } from '../../data/elements';
-import { DEFAULT_SLIDE_SIZE, type ShapeKind } from '../../types/editor';
+import { DEFAULT_SLIDE_SIZE, IMAGE_MASK_OPTIONS, type ShapeKind } from '../../types/editor';
+import { createSampleAudioDataUrl } from '../../utils/media';
 
 const PRESET_COLORS = ['#0f172a', '#ffffff', '#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -19,12 +20,14 @@ const SHAPE_KINDS: { kind: ShapeKind; label: string; preview: React.ReactNode }[
   { kind: 'hexagon', label: 'Hexagon', preview: <path d="m7 4 10 0 5 8-5 8H7l-5-8Z" /> },
 ];
 
-type ElementsTab = 'shapes' | 'icons' | 'graphics' | 'emoji';
+type ElementsTab = 'shapes' | 'frames' | 'media' | 'icons' | 'graphics' | 'emoji';
 
 export function ElementsPanel() {
   const insertIcon = useEditorStore((state) => state.insertIcon);
   const addShape = useEditorStore((state) => state.addShape);
   const addEmoji = useEditorStore((state) => state.addEmoji);
+  const addFrameImage = useEditorStore((state) => state.addFrameImage);
+  const addMedia = useEditorStore((state) => state.addMedia);
   const setRightPanel = useCanvasUi((s) => s.setRightPanel);
   const slideSize = useEditorStore((state) => state.project.slideSize ?? DEFAULT_SLIDE_SIZE);
 
@@ -32,6 +35,7 @@ export function ElementsPanel() {
   const [category, setCategory] = useState<'all' | IconDef['category'] | GraphicDef['category']>('all');
   const [query, setQuery] = useState('');
   const [color, setColor] = useState('#4f46e5');
+  const [videoUrl, setVideoUrl] = useState('');
 
   const center = useMemo(() => ({ x: slideSize.width / 2, y: slideSize.height / 2 }), [slideSize]);
 
@@ -73,6 +77,8 @@ export function ElementsPanel() {
           {(
             [
               ['shapes', 'Shapes'],
+              ['frames', 'Frames'],
+              ['media', 'Media'],
               ['icons', 'Icons'],
               ['graphics', 'Graphics'],
               ['emoji', 'Emoji'],
@@ -216,6 +222,106 @@ export function ElementsPanel() {
                   {emoji}
                 </button>
               ))}
+            </div>
+          </>
+        ) : null}
+
+        {tab === 'frames' ? (
+          <>
+            <p className="panel-hint">
+              Canva-style Image Frames &amp; Device Mockups. Click to insert, then replace with any photo.
+            </p>
+            <div className="frame-grid">
+              {IMAGE_MASK_OPTIONS.filter((opt) => opt.value !== 'none').map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className="frame-card"
+                  onClick={() => addFrameImage(opt.value, opt.label)}
+                >
+                  <span className="frame-badge">{opt.category === 'device' ? '💻' : '🖼'}</span>
+                  <strong>{opt.label}</strong>
+                  <span>{opt.category === 'device' ? 'Device mockup' : 'Shape mask'}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {tab === 'media' ? (
+          <>
+            <p className="panel-hint">Embed Video clips, YouTube URLs, or Audio tracks onto the slide.</p>
+            <button
+              type="button"
+              className="sidebar-action"
+              onClick={() => addMedia('video', { title: 'Motion Keynote Clip', posterColor: '#6366f1' })}
+            >
+              🎬 Insert Motion Video Card
+            </button>
+
+            <div className="field-row" style={{ marginTop: 8 }}>
+              <input
+                className="text-input"
+                placeholder="YouTube or MP4 URL…"
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+              />
+              <button
+                type="button"
+                className="chip"
+                disabled={!videoUrl.trim()}
+                onClick={() => {
+                  addMedia('video', { src: videoUrl.trim(), title: 'Embedded Video' });
+                  setVideoUrl('');
+                }}
+              >
+                Embed
+              </button>
+            </div>
+
+            <p className="panel-hint" style={{ marginTop: 10 }}>
+              Built-in Audio Tracks (Playable WAV):
+            </p>
+            <div className="magic-actions-grid">
+              <button
+                type="button"
+                className="sidebar-action"
+                onClick={() =>
+                  addMedia('audio', {
+                    src: createSampleAudioDataUrl('chime'),
+                    title: 'Crystal Chime Intro',
+                    posterColor: '#6366f1',
+                  })
+                }
+              >
+                🎵 Crystal Chime Intro
+              </button>
+              <button
+                type="button"
+                className="sidebar-action"
+                onClick={() =>
+                  addMedia('audio', {
+                    src: createSampleAudioDataUrl('ambient'),
+                    title: 'Ambient Pad Chord',
+                    posterColor: '#0ea5e9',
+                  })
+                }
+              >
+                🎵 Ambient Pad Chord
+              </button>
+              <button
+                type="button"
+                className="sidebar-action"
+                onClick={() =>
+                  addMedia('audio', {
+                    src: createSampleAudioDataUrl('upbeat'),
+                    title: 'Upbeat Synth Fanfare',
+                    posterColor: '#10b981',
+                  })
+                }
+              >
+                🎵 Upbeat Synth Fanfare
+              </button>
             </div>
           </>
         ) : null}

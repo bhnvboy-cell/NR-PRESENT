@@ -1,11 +1,12 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { Group, Layer, Rect, Stage } from 'react-konva';
 import Konva from 'konva';
-import { DEFAULT_SLIDE_SIZE, type AnimationProps, type SlideTransition } from '../../types/editor';
+import { DEFAULT_SLIDE_SIZE, type AnimationProps, type MediaElement, type SlideTransition } from '../../types/editor';
 import { useEditorStore } from '../../store/editorStore';
 import { useCanvasUi } from '../../store/canvasUi';
 import { backgroundToKonva } from '../../utils/background';
 import { ElementNode } from './ElementNode';
+import { MediaOverlay } from './MediaOverlay';
 
 const TRANSITION_DURATION = 0.55;
 
@@ -115,6 +116,9 @@ export function PresentMode() {
   const offsetX = (vw - slideSize.width * scale) / 2;
   const offsetY = (vh - slideSize.height * scale) / 2;
   const bgProps = backgroundToKonva(slide.backgroundFill, slideSize.width, slideSize.height);
+  const mediaElements = slide.elements.filter(
+    (el): el is MediaElement => !el.hidden && el.type === 'media',
+  );
 
   return (
     <div className="present-overlay">
@@ -155,6 +159,13 @@ export function PresentMode() {
           </Group>
         </Layer>
       </Stage>
+
+      <MediaOverlay
+        elements={mediaElements}
+        zoom={scale}
+        pan={{ x: offsetX, y: offsetY }}
+        presenting
+      />
 
       {laser ? <div ref={laserRef} className="present-laser" style={{ opacity: 0 }} /> : null}
 

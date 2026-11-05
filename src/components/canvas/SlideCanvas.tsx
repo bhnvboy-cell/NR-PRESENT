@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layer, Line, Rect, Stage, Transformer } from 'react-konva';
 import type Konva from 'konva';
-import { DEFAULT_SHADOW, DEFAULT_SLIDE_SIZE, type ShapeKind } from '../../types/editor';
+import { DEFAULT_SHADOW, DEFAULT_SLIDE_SIZE, type MediaElement, type PathElement, type ShapeKind } from '../../types/editor';
 import { useEditorStore } from '../../store/editorStore';
 import { useCanvasUi } from '../../store/canvasUi';
 import { backgroundToKonva } from '../../utils/background';
@@ -10,6 +10,7 @@ import { createId } from '../../utils/id';
 import { ElementNode } from './ElementNode';
 import { TextEditorOverlay } from './TextEditorOverlay';
 import { RulerOverlay } from './RulerOverlay';
+import { MediaOverlay } from './MediaOverlay';
 
 const SHAPE_TOOLS: Record<string, ShapeKind> = {
   rect: 'rect',
@@ -59,7 +60,11 @@ export function SlideCanvas() {
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const panSession = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const drawSession = useRef<{ id: string; startX: number; startY: number; kind: ShapeKind } | null>(null);
+  const penSession = useRef<{ id: string; points: number[] } | null>(null);
   const marqueeSession = useRef<{ startX: number; startY: number } | null>(null);
+  const collaborators = useCanvasUi((state) => state.collaborators);
+  const currentSlideIndex = useEditorStore((state) => state.currentSlideIndex);
+  const comments = useEditorStore((state) => state.project.comments);
 
   const interactive = tool === 'select';
   const panning = tool === 'hand' || spaceHeld;
@@ -192,6 +197,39 @@ export function SlideCanvas() {
       return;
     }
 
+    if (tool === 'pen') {
+      const at = screenToSlide(pointer);
+      ensureHistory();
+      const tempId = createId('path');
+      const { penBrush, penColor, penWidth } = useCanvasUi.getState();
+      const initialPoints = [at.x, at.y, at.x + 0.5, at.y + 0.5];
+      penSession.current = { id: tempId, points: initialPoints };
+      const pathEl: PathElement = {
+        id: tempId,
+        type: 'path',
+        x: 0,
+        y: 0,
+        width: slideSize.width,
+        height: slideSize.height,
+        rotation: 0,
+        opacity: 1,
+        shadow: { ...DEFAULT_SHADOW },
+        locked: false,
+        points: initialPoints,
+        stroke: penColor,
+        strokeWidth: penWidth,
+        brush: penBrush,
+      };
+      useEditorStore.setState((state) => {
+        const slides = state.project.slides.slice();
+        const current = { ...slides[state.currentSlideIndex] };
+        current.elements = [...current.elements, pathEl];
+        slides[state.currentSlideIndex] = current;
+        return { project: { ...state.project, slides }, selectedIds: [] };
+      });
+      return;
+    }
+
     if (tool === 'text' && isBackground) {
       addTextBox(screenToSlide(pointer));
       return;
@@ -253,9 +291,23 @@ export function SlideCanvas() {
     const pointer = stage?.getPointerPosition();
     if (!stage || !pointer) return;
 
+    const slidePt = screenToSlide(pointer);
+    window.dispatchEvent(new CustomEvent('nr:cursor-move', { detail: slidePt }));
+
     if (panSession.current) {
       const session = panSession.current;
       setPan({ x: session.panX + (pointer.x - session.x), y: session.panY + (pointer.y - session.y) });
+      return;
+    }
+
+    if (penSession.current) {
+      const session = penSession.current;
+      const lastX = session.points[session.points.length - 2];
+      const lastY = session.points[session.points.length - 1];
+      if (Math.hypot(slidePt.x - lastX, slidePt.y - lastY) >= 2) {
+        session.points = [...session.points, slidePt.x, slidePt.y];
+        updateElement(session.id, { points: session.points } as Partial<PathElement>, { history: false });
+      }
       return;
     }
 
@@ -331,6 +383,35 @@ export function SlideCanvas() {
       setMarquee(null);
     }
 
+    if (penSession.current) {
+      const session = penSession.current;
+      penSession.current = null;
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (let i = 0; i < session.points.length; i += 2) {
+        xs.push(session.points[i]);
+        ys.push(session.points[i + 1]);
+      }
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      const maxX = Math.max(...xs);
+      const maxY = Math.max(...ys);
+      const localPoints = session.points.map((v, i) => (i % 2 === 0 ? v - minX : v - minY));
+      updateElement(
+        session.id,
+        {
+          x: minX,
+          y: minY,
+          width: Math.max(8, maxX - minX),
+          height: Math.max(8, maxY - minY),
+          points: localPoints,
+        } as Partial<PathElement>,
+        { history: false },
+      );
+      endHistory();
+      return;
+    }
+
     const draw = drawSession.current;
     if (!draw) return;
     drawSession.current = null;
@@ -364,21 +445,32 @@ export function SlideCanvas() {
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
-    if (!file || !file.type.startsWith('image/')) return;
+    if (!file) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const at = screenToSlide({ x: event.clientX - rect.left, y: event.clientY - rect.top });
     const reader = new FileReader();
     reader.onload = () => {
       const src = String(reader.result);
-      const probe = new window.Image();
-      probe.onload = () => addImage(src, { width: probe.width, height: probe.height }, at);
-      probe.src = src;
+      if (file.type.startsWith('image/')) {
+        const probe = new window.Image();
+        probe.onload = () => addImage(src, { width: probe.width, height: probe.height }, at);
+        probe.src = src;
+      } else if (file.type.startsWith('video/')) {
+        useEditorStore.getState().addMedia('video', { src, title: file.name });
+      } else if (file.type.startsWith('audio/')) {
+        useEditorStore.getState().addMedia('audio', { src, title: file.name });
+      }
     };
     reader.readAsDataURL(file);
   };
 
   const editingElement = editingTextId != null ? slide.elements.find((el) => el.id === editingTextId) : null;
+  const mediaElements = slide.elements.filter(
+    (el): el is MediaElement => !el.hidden && el.type === 'media',
+  );
+  const slideComments = (comments ?? []).filter((c) => c.slideId === slide.id && !c.resolved);
+  const activePeers = collaborators.filter((p) => p.slideIndex === currentSlideIndex && p.x != null && p.y != null);
   const bgProps = backgroundToKonva(slide.backgroundFill, slideSize.width, slideSize.height);
 
   return (
@@ -421,7 +513,7 @@ export function SlideCanvas() {
                 element={element}
                 selected={selectedIds.includes(element.id)}
                 interactive={interactive}
-                listening={tool !== 'hand'}
+                listening={tool !== 'hand' && tool !== 'pen'}
               />
             ))}
 
@@ -464,6 +556,43 @@ export function SlideCanvas() {
           }}
         />
       ) : null}
+
+      <MediaOverlay elements={mediaElements} zoom={zoom} pan={pan} />
+
+      {slideComments.map((c, idx) =>
+        c.x != null && c.y != null ? (
+          <button
+            key={c.id}
+            type="button"
+            className="canvas-comment-pin"
+            style={{
+              left: `${pan.x + c.x * zoom}px`,
+              top: `${pan.y + c.y * zoom}px`,
+            }}
+            title={`${c.author}: ${c.text}`}
+            onClick={() => useCanvasUi.getState().setRightPanel('comments')}
+          >
+            💬 {idx + 1}
+          </button>
+        ) : null,
+      )}
+
+      {activePeers.map((peer) => (
+        <div
+          key={peer.peerId}
+          className="collab-cursor"
+          style={{
+            left: `${pan.x + (peer.x ?? 0) * zoom}px`,
+            top: `${pan.y + (peer.y ?? 0) * zoom}px`,
+            borderColor: peer.color,
+          }}
+        >
+          <span className="collab-cursor-dot" style={{ background: peer.color }} />
+          <span className="collab-cursor-tag" style={{ background: peer.color }}>
+            {peer.name}
+          </span>
+        </div>
+      ))}
 
       {editingElement && editingElement.type === 'text' ? (
         <TextEditorOverlay

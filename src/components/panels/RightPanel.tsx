@@ -4,6 +4,8 @@ import { LayersPanel } from './LayersPanel';
 import { TemplateGallery } from './TemplateGallery';
 import { ElementsPanel } from './ElementsPanel';
 import { PalettePanel } from './PalettePanel';
+import { MagicPanel } from './MagicPanel';
+import { CommentsPanel } from './CommentsPanel';
 
 export function RightPanel() {
   const panel = useCanvasUi((s) => s.rightPanel);
@@ -15,6 +17,8 @@ export function RightPanel() {
       {panel === 'templates' ? <TemplateGallery /> : null}
       {panel === 'elements' ? <ElementsPanel /> : null}
       {panel === 'palette' ? <PalettePanel /> : null}
+      {panel === 'magic' ? <MagicPanel /> : null}
+      {panel === 'comments' ? <CommentsPanel /> : null}
     </div>
   );
 }

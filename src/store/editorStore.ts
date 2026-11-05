@@ -12,11 +12,16 @@ import {
   type ChartElement,
   type EditorTool,
   type ImageFilters,
+  type ImageMaskKind,
+  type MediaElement,
+  type MediaKind,
+  type PathElement,
   type Project,
   type ShapeElement,
   type ShapeKind,
   type Slide,
   type SlideBackground,
+  type SlideComment,
   type SlideSize,
   type SlideTransition,
   type TableElement,
@@ -27,6 +32,8 @@ import { templateToSlide, type SlideTemplate } from '../data/templates';
 import { deckToSlides, type DeckTemplate } from '../data/deckTemplates';
 import { deepClone } from '../utils/clone';
 import { createId } from '../utils/id';
+import { createFramePlaceholderDataUrl } from '../utils/imageMask';
+import { createSampleAudioDataUrl } from '../utils/media';
 import type { Bounds } from '../utils/snap';
 
 const HISTORY_LIMIT = 60;
@@ -105,6 +112,10 @@ function scaleSlide(slide: Slide, k: number, dx: number, dy: number): Slide {
         const src = el as TableElement;
         next.colWidths = src.colWidths.map((w) => w * k);
         next.rowHeights = src.rowHeights.map((h) => h * k);
+      }
+      if (next.type === 'path') {
+        const src = el as PathElement;
+        next.points = src.points.map((v) => v * k);
       }
       return next;
     }),
@@ -194,8 +205,14 @@ interface EditorState {
   addShape: (shape: ShapeKind, at: { x: number; y: number }) => void;
   addTextBox: (at: { x: number; y: number }) => void;
   addImage: (src: string, natural: { width: number; height: number }, at?: { x: number; y: number }) => void;
+  addFrameImage: (mask: ImageMaskKind, label?: string) => void;
+  addMedia: (mediaType: MediaKind, options?: { src?: string; title?: string; posterColor?: string }) => void;
   addChart: (at?: { x: number; y: number }) => void;
   addTable: (at?: { x: number; y: number }) => void;
+  addComment: (text: string, author?: string, pin?: { x: number; y: number }) => void;
+  replyComment: (commentId: string, text: string, author?: string) => void;
+  toggleResolveComment: (commentId: string) => void;
+  deleteComment: (commentId: string) => void;
   insertIcon: (src: string, color: string, at?: { x: number; y: number }) => void;
   updateElement: (id: string, patch: Partial<CanvasElement>, options?: PatchOptions) => void;
   updateSelected: (patch: Partial<CanvasElement>, options?: PatchOptions) => void;
@@ -286,13 +303,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     return slide.elements.filter((el) => ids.has(el.id));
   },
 
-  setProject: (project) => {
+  setProject: (rawProject) => {
+    const wrapped = rawProject as Project & { document?: Project };
+    const project: Project = wrapped.document && Array.isArray(wrapped.document.slides)
+      ? {
+          ...wrapped.document,
+          id: wrapped.id || wrapped.document.id,
+          name: wrapped.name || wrapped.document.name,
+          updatedAt: wrapped.updatedAt || wrapped.document.updatedAt,
+        }
+      : rawProject;
+    const rawSlides = Array.isArray(project.slides) && project.slides.length > 0
+      ? project.slides
+      : [createSlide(0)];
     const migrated: Project = {
       ...project,
       viewport: project.viewport ?? { ...DEFAULT_VIEWPORT },
       slideSize: project.slideSize ?? { ...DEFAULT_SLIDE_SIZE },
-      slides: project.slides.map((slide) => ({
+      slides: rawSlides.map((slide) => ({
         ...slide,
+        elements: Array.isArray(slide.elements) ? slide.elements : [],
         backgroundFill: slide.backgroundFill ?? { kind: 'solid', color: slide.background ?? '#ffffff' },
       })),
     };
@@ -574,6 +604,123 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       filters: deepClone(DEFAULT_IMAGE.filters),
     };
     get().addElement(element);
+  },
+
+  addFrameImage: (mask, label) => {
+    const size = sizeOf(get());
+    const isPhone = mask === 'phone';
+    const isWide = mask === 'laptop' || mask === 'browser';
+    const width = isPhone ? 240 : isWide ? 460 : 320;
+    const height = isPhone ? 440 : isWide ? 300 : 320;
+    const element: CanvasElement = {
+      id: createId('el'),
+      type: 'image',
+      src: createFramePlaceholderDataUrl(label ?? `${mask[0].toUpperCase() + mask.slice(1)} Frame`, '#6366f1'),
+      width,
+      height,
+      x: Math.round(size.width / 2 - width / 2),
+      y: Math.round(size.height / 2 - height / 2),
+      rotation: 0,
+      opacity: 1,
+      shadow: { ...DEFAULT_SHADOW },
+      locked: false,
+      cornerRadius: 0,
+      filters: deepClone(DEFAULT_IMAGE.filters),
+      mask,
+      frameColor: '#1e293b',
+    };
+    get().addElement(element);
+  },
+
+  addMedia: (mediaType, options) => {
+    const size = sizeOf(get());
+    const width = mediaType === 'video' ? 480 : 380;
+    const height = mediaType === 'video' ? 280 : 88;
+    const element: MediaElement = {
+      id: createId('el'),
+      type: 'media',
+      mediaType,
+      src: options?.src ?? (mediaType === 'audio' ? createSampleAudioDataUrl('chime') : ''),
+      title: options?.title ?? (mediaType === 'video' ? 'Product Demo Video' : 'Ambient Presentation Audio'),
+      width,
+      height,
+      x: Math.round(size.width / 2 - width / 2),
+      y: Math.round(size.height / 2 - height / 2),
+      rotation: 0,
+      opacity: 1,
+      shadow: { ...DEFAULT_SHADOW, enabled: true },
+      locked: false,
+      autoplay: false,
+      loop: false,
+      muted: false,
+      posterColor: options?.posterColor ?? '#6366f1',
+    };
+    get().addElement(element);
+  },
+
+  addComment: (text, author = 'You', pin) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const slide = get().currentSlide();
+    const comment: SlideComment = {
+      id: createId('cmt'),
+      slideId: slide.id,
+      author,
+      authorColor: '#4f46e5',
+      text: trimmed,
+      createdAt: new Date().toISOString(),
+      resolved: false,
+      x: pin?.x,
+      y: pin?.y,
+      replies: [],
+    };
+    set((state) => ({
+      project: {
+        ...state.project,
+        comments: [...(state.project.comments ?? []), comment],
+      },
+    }));
+  },
+
+  replyComment: (commentId, text, author = 'You') => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    set((state) => ({
+      project: {
+        ...state.project,
+        comments: (state.project.comments ?? []).map((c) =>
+          c.id === commentId
+            ? {
+                ...c,
+                replies: [
+                  ...(c.replies ?? []),
+                  { id: createId('rpl'), author, text: trimmed, createdAt: new Date().toISOString() },
+                ],
+              }
+            : c,
+        ),
+      },
+    }));
+  },
+
+  toggleResolveComment: (commentId) => {
+    set((state) => ({
+      project: {
+        ...state.project,
+        comments: (state.project.comments ?? []).map((c) =>
+          c.id === commentId ? { ...c, resolved: !c.resolved } : c,
+        ),
+      },
+    }));
+  },
+
+  deleteComment: (commentId) => {
+    set((state) => ({
+      project: {
+        ...state.project,
+        comments: (state.project.comments ?? []).filter((c) => c.id !== commentId),
+      },
+    }));
   },
 
   addChart: (at) => {

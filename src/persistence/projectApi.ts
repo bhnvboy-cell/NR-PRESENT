@@ -78,6 +78,17 @@ export class LocalProjectApi implements ProjectApi {
   }
 }
 
+const LOCAL_OVERRIDE_KEY = 'nr-presentation:local-override';
+
+export function setLocalOverride(enabled: boolean): void {
+  if (enabled) sessionStorage.setItem(LOCAL_OVERRIDE_KEY, '1');
+  else sessionStorage.removeItem(LOCAL_OVERRIDE_KEY);
+}
+
+export function isLocalOverride(): boolean {
+  return sessionStorage.getItem(LOCAL_OVERRIDE_KEY) === '1';
+}
+
 export const localProjectApi: ProjectApi = new LocalProjectApi();
 
 function notifyAuthLost(): void {
@@ -91,6 +102,19 @@ async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
     throw new Error('Not signed in');
   }
   return response;
+}
+
+function unwrapServerProject(raw: unknown): Project {
+  const item = raw as Project & { document?: Project };
+  if (item && item.document && typeof item.document === 'object') {
+    return {
+      ...item.document,
+      id: item.id || item.document.id,
+      name: item.name || item.document.name,
+      updatedAt: item.updatedAt || item.document.updatedAt,
+    };
+  }
+  return item;
 }
 
 /**
@@ -111,37 +135,43 @@ export class RestProjectApi implements ProjectApi {
   }
 
   async list(): Promise<Project[]> {
+    if (isLocalOverride()) return localProjectApi.list();
     const response = await authedFetch(this.url('/projects'), { method: 'GET' });
     if (!response.ok) throw new Error(`GET /projects failed (${response.status})`);
-    return (await response.json()) as Project[];
+    const rows = (await response.json()) as unknown[];
+    return rows.map(unwrapServerProject);
   }
 
   async listMeta(): Promise<ProjectMeta[]> {
+    if (isLocalOverride()) return localProjectApi.listMeta();
     const response = await authedFetch(this.url('/projects/meta'), { method: 'GET' });
     if (!response.ok) throw new Error(`GET /projects/meta failed (${response.status})`);
     return (await response.json()) as ProjectMeta[];
   }
 
   async get(id: string): Promise<Project | null> {
+    if (isLocalOverride()) return localProjectApi.get(id);
     const response = await authedFetch(this.url(`/projects/${encodeURIComponent(id)}`), { method: 'GET' });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`GET /projects/${id} failed (${response.status})`);
-    return (await response.json()) as Project;
+    return unwrapServerProject(await response.json());
   }
 
   async save(project: Project): Promise<Project> {
+    if (isLocalOverride()) return localProjectApi.save(project);
     const uploadable = await this.extractAssets(project);
     const response = await authedFetch(this.url('/projects'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(uploadable),
+      body: JSON.stringify({ id: uploadable.id, name: uploadable.name, document: uploadable }),
     });
     if (!response.ok) throw new Error(`POST /projects failed (${response.status})`);
     setActiveProjectId(project.id);
-    return (await response.json()) as Project;
+    return unwrapServerProject(await response.json());
   }
 
   async remove(id: string): Promise<void> {
+    if (isLocalOverride()) return localProjectApi.remove(id);
     const response = await authedFetch(this.url(`/projects/${encodeURIComponent(id)}`), { method: 'DELETE' });
     if (!response.ok && response.status !== 404) {
       throw new Error(`DELETE /projects/${id} failed (${response.status})`);

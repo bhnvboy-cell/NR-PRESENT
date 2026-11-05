@@ -8,13 +8,17 @@ const TYPE_LABEL: Record<CanvasElement['type'], string> = {
   image: 'Image',
   chart: 'Chart',
   table: 'Table',
+  path: 'Draw',
+  media: 'Media',
 };
 
 function elementLabel(el: CanvasElement): string {
   if (el.type === 'text') return el.text.slice(0, 28) || 'Text';
   if (el.type === 'chart') return el.title || 'Chart';
   if (el.type === 'shape') return el.shape;
-  if (el.type === 'image') return 'Image';
+  if (el.type === 'image') return el.mask && el.mask !== 'none' ? `Frame (${el.mask})` : 'Image';
+  if (el.type === 'path') return `Freehand (${el.brush})`;
+  if (el.type === 'media') return el.title || (el.mediaType === 'video' ? 'Video' : 'Audio');
   return TYPE_LABEL[el.type];
 }
 

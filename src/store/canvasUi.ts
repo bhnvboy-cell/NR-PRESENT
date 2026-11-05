@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { GuideLine } from '../utils/snap';
+import type { BrushKind } from '../types/editor';
 
 export interface MarqueeRect {
   x: number;
@@ -8,7 +9,25 @@ export interface MarqueeRect {
   height: number;
 }
 
-export type RightPanel = 'none' | 'projects' | 'layers' | 'templates' | 'elements' | 'palette';
+export interface CollaboratorPresence {
+  peerId: string;
+  name: string;
+  color: string;
+  slideIndex: number;
+  x?: number;
+  y?: number;
+  updatedAt: number;
+}
+
+export type RightPanel =
+  | 'none'
+  | 'projects'
+  | 'layers'
+  | 'templates'
+  | 'elements'
+  | 'palette'
+  | 'magic'
+  | 'comments';
 
 interface CanvasUiState {
   guides: GuideLine[];
@@ -19,6 +38,10 @@ interface CanvasUiState {
   rightPanel: RightPanel;
   findOpen: boolean;
   shortcutsOpen: boolean;
+  penBrush: BrushKind;
+  penColor: string;
+  penWidth: number;
+  collaborators: CollaboratorPresence[];
 
   setGuides: (guides: GuideLine[]) => void;
   clearGuides: () => void;
@@ -31,6 +54,10 @@ interface CanvasUiState {
   setFindOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
   toggleShortcuts: () => void;
+  setPenBrush: (brush: BrushKind) => void;
+  setPenColor: (color: string) => void;
+  setPenWidth: (width: number) => void;
+  setCollaborators: (peers: CollaboratorPresence[]) => void;
 }
 
 export const useCanvasUi = create<CanvasUiState>((set) => ({
@@ -42,6 +69,10 @@ export const useCanvasUi = create<CanvasUiState>((set) => ({
   rightPanel: 'none',
   findOpen: false,
   shortcutsOpen: false,
+  penBrush: 'pen',
+  penColor: '#4f46e5',
+  penWidth: 4,
+  collaborators: [],
 
   setGuides: (guides) => set({ guides }),
   clearGuides: () => set({ guides: [] }),
@@ -60,4 +91,12 @@ export const useCanvasUi = create<CanvasUiState>((set) => ({
   setFindOpen: (findOpen) => set({ findOpen }),
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
   toggleShortcuts: () => set((state) => ({ shortcutsOpen: !state.shortcutsOpen })),
+  setPenBrush: (penBrush) =>
+    set((state) => ({
+      penBrush,
+      penWidth: penBrush === 'highlighter' ? 18 : penBrush === 'marker' ? 9 : state.penWidth > 8 ? 4 : state.penWidth,
+    })),
+  setPenColor: (penColor) => set({ penColor }),
+  setPenWidth: (penWidth) => set({ penWidth }),
+  setCollaborators: (collaborators) => set({ collaborators }),
 }));

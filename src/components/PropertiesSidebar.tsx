@@ -1,20 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
+import { useCanvasUi } from '../store/canvasUi';
 import { FONT_OPTIONS, FONT_CATEGORIES, type FontOption } from '../data/fonts';
 import {
   ANIMATION_OPTIONS,
   BACKGROUND_PRESETS,
   CHART_PALETTES,
   DEFAULT_SLIDE_SIZE,
+  IMAGE_MASK_OPTIONS,
   SLIDE_SIZE_PRESETS,
+  TEXT_EFFECT_OPTIONS,
   TRANSITION_OPTIONS,
   type AnimationKind,
   type AnimationProps,
+  type BrushKind,
   type CanvasElement,
   type ChartElement,
   type ChartType,
   type ImageElement,
   type ImageFilterPreset,
+  type ImageMaskKind,
+  type MediaElement,
+  type PathElement,
   type ShapeElement,
   type ShadowProps,
   type SlideBackground,
@@ -22,12 +29,14 @@ import {
   type TableElement,
   type TextAlignment,
   type TextDecoration,
+  type TextEffectKind,
   type TextElement,
   type FontWeight,
 } from '../types/editor';
 import { backgroundToCss } from '../utils/background';
 import { FILTER_PRESET_OPTIONS } from '../utils/filters';
 import { coverCrop, CROP_PRESETS } from '../utils/imageCrop';
+import { createSampleAudioDataUrl } from '../utils/media';
 import { ColorField } from './common/ColorField';
 import { NumberField } from './common/NumberField';
 
@@ -60,6 +69,7 @@ export function PropertiesSidebar() {
   const setSlideSize = useEditorStore((state) => state.setSlideSize);
   const groupSelected = useEditorStore((state) => state.groupSelected);
   const ungroupSelected = useEditorStore((state) => state.ungroupSelected);
+  const tool = useEditorStore((state) => state.tool);
   const replaceImage = useReplaceImage();
 
   const selected = useMemo(() => {
@@ -72,6 +82,7 @@ export function PropertiesSidebar() {
   if (selected.length === 0) {
     return (
       <aside className="properties-sidebar">
+        {tool === 'pen' ? <PenToolSettings /> : null}
         <PanelTitle>Slide background</PanelTitle>
         <BackgroundEditor key={slide.id} current={slide.backgroundFill} onApply={setBackground} />
         <SlideNotesEditor />
@@ -155,6 +166,8 @@ export function PropertiesSidebar() {
       {single?.type === 'image' ? <ImageControls element={single} onReplace={replaceImage} onChange={(patch) => updateElement(single.id, patch)} /> : null}
       {single?.type === 'chart' ? <ChartControls element={single} /> : null}
       {single?.type === 'table' ? <TableControls element={single} /> : null}
+      {single?.type === 'path' ? <PathControls element={single} onChange={(patch) => updateElement(single.id, patch)} /> : null}
+      {single?.type === 'media' ? <MediaControls element={single} onChange={(patch) => updateElement(single.id, patch)} /> : null}
 
       <PanelTitle>Transform</PanelTitle>
       <div className="field-grid">
@@ -399,6 +412,10 @@ function describeType(element: CanvasElement): string {
       return 'Chart';
     case 'table':
       return 'Table';
+    case 'path':
+      return 'Freehand Draw';
+    case 'media':
+      return element.mediaType === 'video' ? 'Video Embed' : 'Audio Track';
   }
   return 'Element';
 }
@@ -406,6 +423,8 @@ function describeType(element: CanvasElement): string {
 function getAnyFill(element: CanvasElement): string {
   if (element.type === 'text') return element.fill;
   if (element.type === 'shape') return element.shape === 'line' || element.shape === 'arrow' ? element.stroke : element.fill;
+  if (element.type === 'path') return element.stroke;
+  if (element.type === 'media') return element.posterColor ?? '#6366f1';
   if (element.type === 'chart') return element.accent;
   if (element.type === 'table') return element.headerFill;
   return '#000000';
@@ -591,6 +610,51 @@ function TextControls({ element, onChange }: ControlProps<TextElement>) {
         value={element.letterSpacing}
         onChange={(value) => onChange({ letterSpacing: value })}
       />
+
+      <PanelTitle>Text Effects &amp; Curve</PanelTitle>
+      <div className="field-row">
+        <span className="field-label">Effect</span>
+        <select
+          className="select-input"
+          value={element.effect ?? 'none'}
+          onChange={(e) => onChange({ effect: e.target.value as TextEffectKind })}
+        >
+          {TEXT_EFFECT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <NumberField
+        label="Curve arc"
+        min={-180}
+        max={180}
+        step={5}
+        suffix="°"
+        value={element.curve ?? 0}
+        onChange={(value) => onChange({ curve: clamp(value, -180, 180) })}
+      />
+      <ColorField
+        label="Outline / Glow"
+        value={element.stroke ?? '#4f46e5'}
+        onChange={(value) => onChange({ stroke: value })}
+      />
+      <NumberField
+        label="Outline width"
+        min={0}
+        max={20}
+        step={0.5}
+        value={element.strokeWidth ?? 0}
+        onChange={(value) => onChange({ strokeWidth: clamp(value, 0, 20) })}
+      />
+      <button
+        type="button"
+        className="sidebar-action"
+        onClick={() => useCanvasUi.getState().setRightPanel('magic')}
+      >
+        ✨ Rewrite with Magic Write…
+      </button>
     </>
   );
 }
@@ -669,6 +733,29 @@ function ImageControls({
       <button type="button" className="sidebar-action" onClick={onReplace}>
         Replace image…
       </button>
+
+      <PanelTitle>Frame / Mask</PanelTitle>
+      <div className="field-row">
+        <span className="field-label">Frame</span>
+        <select
+          className="select-input"
+          value={element.mask ?? 'none'}
+          onChange={(e) => onChange({ mask: e.target.value as ImageMaskKind })}
+        >
+          {IMAGE_MASK_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label} ({opt.category})
+            </option>
+          ))}
+        </select>
+      </div>
+      {element.mask && element.mask !== 'none' ? (
+        <ColorField
+          label="Frame color"
+          value={element.frameColor ?? '#1e293b'}
+          onChange={(value) => onChange({ frameColor: value })}
+        />
+      ) : null}
 
       <PanelTitle>Crop</PanelTitle>
       <div className="chip-row">
@@ -1248,4 +1335,173 @@ function useReplaceImage(): () => void {
     };
     input.click();
   };
+}
+
+function PenToolSettings() {
+  const penBrush = useCanvasUi((s) => s.penBrush);
+  const penColor = useCanvasUi((s) => s.penColor);
+  const penWidth = useCanvasUi((s) => s.penWidth);
+  const setPenBrush = useCanvasUi((s) => s.setPenBrush);
+  const setPenColor = useCanvasUi((s) => s.setPenColor);
+  const setPenWidth = useCanvasUi((s) => s.setPenWidth);
+
+  return (
+    <>
+      <PanelTitle>✏️ Draw Brush</PanelTitle>
+      <div className="segmented">
+        {(['pen', 'marker', 'highlighter'] as BrushKind[]).map((b) => (
+          <button
+            key={b}
+            type="button"
+            className={penBrush === b ? 'is-active' : ''}
+            onClick={() => setPenBrush(b)}
+          >
+            {b[0].toUpperCase() + b.slice(1)}
+          </button>
+        ))}
+      </div>
+      <ColorField label="Ink color" value={penColor} onChange={setPenColor} />
+      <NumberField
+        label="Stroke width"
+        min={1}
+        max={48}
+        suffix="px"
+        value={penWidth}
+        onChange={(v) => setPenWidth(clamp(v, 1, 60))}
+      />
+      <p className="sidebar-hint">Click and drag anywhere on the slide to draw freehand strokes.</p>
+    </>
+  );
+}
+
+function PathControls({ element, onChange }: ControlProps<PathElement>) {
+  return (
+    <>
+      <PanelTitle>Freehand Stroke</PanelTitle>
+      <div className="field-row">
+        <span className="field-label">Brush</span>
+        <div className="segmented">
+          {(['pen', 'marker', 'highlighter'] as BrushKind[]).map((b) => (
+            <button
+              key={b}
+              type="button"
+              className={element.brush === b ? 'is-active' : ''}
+              onClick={() => onChange({ brush: b })}
+            >
+              {b[0].toUpperCase() + b.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ColorField label="Stroke" value={element.stroke} onChange={(value) => onChange({ stroke: value })} />
+      <NumberField
+        label="Width"
+        min={1}
+        max={60}
+        suffix="px"
+        value={element.strokeWidth}
+        onChange={(value) => onChange({ strokeWidth: clamp(value, 1, 60) })}
+      />
+    </>
+  );
+}
+
+function MediaControls({ element, onChange }: ControlProps<MediaElement>) {
+  const pickFile = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = element.mediaType === 'video' ? 'video/*' : 'audio/*';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        onChange({ src: String(reader.result), title: file.name });
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  return (
+    <>
+      <PanelTitle>{element.mediaType === 'video' ? 'Video Embed' : 'Audio Track'}</PanelTitle>
+      <div className="field-row">
+        <span className="field-label">Title</span>
+        <input
+          className="text-input"
+          value={element.title}
+          onChange={(e) => onChange({ title: e.target.value })}
+        />
+      </div>
+      <div className="field-row">
+        <span className="field-label">URL</span>
+        <input
+          className="text-input"
+          placeholder={element.mediaType === 'video' ? 'YouTube or MP4 URL…' : 'MP3/WAV URL…'}
+          value={element.src.startsWith('data:') ? '' : element.src}
+          onChange={(e) => onChange({ src: e.target.value })}
+        />
+      </div>
+      <button type="button" className="sidebar-action" onClick={pickFile}>
+        Upload {element.mediaType} file…
+      </button>
+      {element.mediaType === 'audio' ? (
+        <div className="chip-row">
+          <button
+            type="button"
+            className="chip"
+            onClick={() => onChange({ src: createSampleAudioDataUrl('chime'), title: 'Crystal Chime' })}
+          >
+            🎵 Chime
+          </button>
+          <button
+            type="button"
+            className="chip"
+            onClick={() => onChange({ src: createSampleAudioDataUrl('ambient'), title: 'Ambient Pad' })}
+          >
+            🎵 Ambient
+          </button>
+          <button
+            type="button"
+            className="chip"
+            onClick={() => onChange({ src: createSampleAudioDataUrl('upbeat'), title: 'Upbeat Synth' })}
+          >
+            🎵 Upbeat
+          </button>
+        </div>
+      ) : null}
+      <ColorField
+        label="Accent color"
+        value={element.posterColor ?? '#6366f1'}
+        onChange={(value) => onChange({ posterColor: value })}
+      />
+      <div className="checkbox-grid">
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={Boolean(element.autoplay)}
+            onChange={(e) => onChange({ autoplay: e.target.checked })}
+          />
+          Autoplay in Present
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={Boolean(element.loop)}
+            onChange={(e) => onChange({ loop: e.target.checked })}
+          />
+          Loop playback
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={Boolean(element.muted)}
+            onChange={(e) => onChange({ muted: e.target.checked })}
+          />
+          Muted
+        </label>
+      </div>
+    </>
+  );
 }

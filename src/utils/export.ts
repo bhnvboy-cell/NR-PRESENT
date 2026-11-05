@@ -16,7 +16,10 @@ import { cropRect } from './imageCrop';
 import { linePoints, polygonPoints } from './geometry';
 import { drawChart } from './chart';
 import { drawTable } from './table';
-import type { ChartElement, TableElement } from '../types/editor';
+import { drawStyledText, hasCustomTextRender } from './textEffects';
+import { drawMaskedImage, hasImageMask } from './imageMask';
+import { drawMediaElement } from './media';
+import type { ChartElement, MediaElement, PathElement, TableElement } from '../types/editor';
 
 function applyCommon(node: Konva.Node, el: CanvasElement): void {
   node.position({ x: el.x, y: el.y });
@@ -34,7 +37,19 @@ function applyCommon(node: Konva.Node, el: CanvasElement): void {
   }
 }
 
-function buildText(el: TextElement): Konva.Text {
+function buildText(el: TextElement): Konva.Text | Konva.Shape {
+  if (hasCustomTextRender(el)) {
+    const node = new Konva.Shape({
+      width: el.width,
+      height: Math.max(el.height, el.fontSize * 2.2),
+      sceneFunc: (ctx: unknown) => {
+        const raw = (ctx as { _context: CanvasRenderingContext2D })._context;
+        drawStyledText(raw, el);
+      },
+    });
+    applyCommon(node, el);
+    return node;
+  }
   const node = new Konva.Text({
     text: el.text,
     width: el.width,
@@ -131,8 +146,20 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-async function buildImage(el: ImageElement): Promise<Konva.Image> {
+async function buildImage(el: ImageElement): Promise<Konva.Image | Konva.Shape> {
   const img = await loadImage(el.src);
+  if (hasImageMask(el)) {
+    const node = new Konva.Shape({
+      width: el.width,
+      height: el.height,
+      sceneFunc: (ctx: unknown) => {
+        const raw = (ctx as { _context: CanvasRenderingContext2D })._context;
+        drawMaskedImage(raw, img, el);
+      },
+    });
+    applyCommon(node, el);
+    return node;
+  }
   const crop = cropRect(el, { width: img.naturalWidth, height: img.naturalHeight });
   const node = new Konva.Image({
     image: img,
@@ -178,6 +205,35 @@ function buildTable(el: TableElement): Konva.Shape {
   return node;
 }
 
+function buildPath(el: PathElement): Konva.Line {
+  const node = new Konva.Line({
+    points: el.points,
+    stroke: el.stroke,
+    strokeWidth: el.strokeWidth,
+    tension: 0.4,
+    lineCap: 'round',
+    lineJoin: 'round',
+  });
+  applyCommon(node, el);
+  if (el.brush === 'highlighter') {
+    node.opacity(el.opacity * 0.45);
+  }
+  return node;
+}
+
+function buildMedia(el: MediaElement): Konva.Shape {
+  const node = new Konva.Shape({
+    width: el.width,
+    height: el.height,
+    sceneFunc: (ctx: unknown) => {
+      const raw = (ctx as { _context: CanvasRenderingContext2D })._context;
+      drawMediaElement(raw, el);
+    },
+  });
+  applyCommon(node, el);
+  return node;
+}
+
 export interface RenderOptions {
   pixelRatio?: number;
   width?: number;
@@ -216,6 +272,8 @@ export async function renderSlideToDataURL(
     else if (el.type === 'shape') node = buildShape(el);
     else if (el.type === 'chart') node = buildChart(el);
     else if (el.type === 'table') node = buildTable(el);
+    else if (el.type === 'path') node = buildPath(el);
+    else if (el.type === 'media') node = buildMedia(el);
     else node = await buildImage(el);
     layer.add(node as Konva.Shape);
   }

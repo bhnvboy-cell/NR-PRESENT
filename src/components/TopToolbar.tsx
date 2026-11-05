@@ -16,6 +16,7 @@ interface ToolButton {
 const TOOLS: ToolButton[] = [
   { id: 'select', label: '⬚', hint: 'Select (V)' },
   { id: 'text', label: 'T', hint: 'Text (T)' },
+  { id: 'pen', label: '✏️', hint: 'Draw / Pen (B)' },
   { id: 'rect', label: '▭', hint: 'Rectangle (R)' },
   { id: 'ellipse', label: '◯', hint: 'Ellipse (O)' },
   { id: 'triangle', label: '▲', hint: 'Triangle' },
@@ -65,8 +66,12 @@ export function TopToolbar() {
   const setViewport = useEditorStore((state) => state.setViewport);
   const addChart = useEditorStore((state) => state.addChart);
   const addTable = useEditorStore((state) => state.addTable);
+  const addMedia = useEditorStore((state) => state.addMedia);
+  const addFrameImage = useEditorStore((state) => state.addFrameImage);
   const toggleRightPanel = useCanvasUi((s) => s.toggleRightPanel);
   const rightPanel = useCanvasUi((s) => s.rightPanel);
+  const collaborators = useCanvasUi((s) => s.collaborators);
+  const commentCount = useEditorStore((s) => (s.project.comments ?? []).filter((c) => !c.resolved).length);
 
   const slideCount = useEditorStore((state) => state.project.slides.length);
   const currentIndex = useEditorStore((state) => state.currentSlideIndex);
@@ -160,8 +165,20 @@ export function TopToolbar() {
           <MenuItem icon="▦" onClick={() => addTable()} title="Insert table">
             Table
           </MenuItem>
+          <MenuItem icon="🎬" onClick={() => addMedia('video')} title="Insert video clip">
+            Video clip
+          </MenuItem>
+          <MenuItem icon="🎵" onClick={() => addMedia('audio')} title="Insert audio track">
+            Audio track
+          </MenuItem>
+          <MenuItem icon="💻" onClick={() => addFrameImage('laptop', 'Laptop Mockup')} title="Insert device frame">
+            Device frame
+          </MenuItem>
           <MenuDivider />
-          <MenuItem icon="🌟" onClick={() => toggleRightPanel('elements')} title="Browse shapes, icons, graphics and emoji">
+          <MenuItem icon="✨" onClick={() => toggleRightPanel('magic')} title="AI Magic Design & Magic Write">
+            Magic Studio (AI)
+          </MenuItem>
+          <MenuItem icon="🌟" onClick={() => toggleRightPanel('elements')} title="Browse shapes, frames, media, icons, graphics and emoji">
             Elements
           </MenuItem>
           <MenuItem icon="🗂" onClick={() => toggleRightPanel('templates')} title="Slide & deck templates">
@@ -171,10 +188,30 @@ export function TopToolbar() {
             Palettes
           </MenuItem>
           <MenuDivider />
+          <MenuItem icon="💬" onClick={() => toggleRightPanel('comments')} title="Slide comments & collaboration">
+            Comments
+          </MenuItem>
           <MenuItem icon="⧉" onClick={() => toggleRightPanel('layers')} title="Layers panel">
             Layers
           </MenuItem>
         </Dropdown>
+
+        <button
+          type="button"
+          className={`toolbar-button ${rightPanel === 'magic' ? 'is-active' : ''}`}
+          onClick={() => toggleRightPanel('magic')}
+          title="AI Magic Studio (Generate Slides & Magic Write)"
+        >
+          ✨
+        </button>
+        <button
+          type="button"
+          className={`toolbar-button ${rightPanel === 'comments' ? 'is-active' : ''}`}
+          onClick={() => toggleRightPanel('comments')}
+          title="Comments & Real-Time Collaboration"
+        >
+          💬{commentCount > 0 || collaborators.length > 0 ? ` ${commentCount || collaborators.length + 1}` : ''}
+        </button>
 
         <button
           type="button"

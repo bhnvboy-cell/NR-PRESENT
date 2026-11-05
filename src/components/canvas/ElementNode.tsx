@@ -5,6 +5,8 @@ import type {
   CanvasElement,
   ChartElement,
   ImageElement,
+  MediaElement,
+  PathElement,
   ShapeElement,
   TableElement,
   TextElement,
@@ -18,6 +20,9 @@ import { cropRect } from '../../utils/imageCrop';
 import { computeSnap } from '../../utils/snap';
 import { drawChart } from '../../utils/chart';
 import { drawTable } from '../../utils/table';
+import { drawStyledText, hasCustomTextRender } from '../../utils/textEffects';
+import { drawMaskedImage, hasImageMask } from '../../utils/imageMask';
+import { drawMediaElement } from '../../utils/media';
 
 /** Extract the raw canvas 2D context from a Konva scene context. */
 function rawCtx(ctx: unknown): CanvasRenderingContext2D {
@@ -180,6 +185,10 @@ export function ElementNode({ element, selected, interactive, listening }: Eleme
       return <ChartBlock element={element} common={commonProps} nodeRef={nodeRef} />;
     case 'table':
       return <TableBlock element={element} common={commonProps} nodeRef={nodeRef} />;
+    case 'path':
+      return <PathBlock element={element} common={commonProps} nodeRef={nodeRef} />;
+    case 'media':
+      return <MediaBlock element={element} common={commonProps} nodeRef={nodeRef} />;
     default:
       return null;
   }
@@ -219,6 +228,17 @@ function commitScale(
     return;
   }
 
+  if (element.type === 'path') {
+    update({
+      width: Math.max(4, element.width * scaleX),
+      height: Math.max(4, element.height * scaleY),
+      points: element.points.map((v, i) => (i % 2 === 0 ? v * scaleX : v * scaleY)),
+      x: node.x(),
+      y: node.y(),
+    } as Partial<PathElement>);
+    return;
+  }
+
   const minHeight =
     element.type === 'shape' && (element.shape === 'line' || element.shape === 'arrow') ? 0 : 4;
   update({
@@ -239,6 +259,36 @@ function TextBlock({
 }: BlockProps<TextElement> & { editing: boolean; draggable: boolean }) {
   const updateElement = useEditorStore((state) => state.updateElement);
   const fontStyle = element.italic ? 'italic' : 'normal';
+
+  if (hasCustomTextRender(element)) {
+    return (
+      <Shape
+        {...(common as Konva.ShapeConfig)}
+        ref={nodeRef as React.RefObject<Konva.Shape>}
+        width={element.width}
+        height={Math.max(element.height, element.fontSize * 2.2)}
+        visible={!editing}
+        onDblClick={onDoubleClick}
+        sceneFunc={(ctx, shape) => {
+          drawStyledText(rawCtx(ctx), element);
+          ctx.beginPath();
+          ctx.rect(0, 0, element.width, Math.max(element.height, element.fontSize * 2.2));
+          ctx.closePath();
+          ctx.fillStrokeShape(shape);
+        }}
+        fill="rgba(0,0,0,0)"
+        onTransformEnd={(event) => {
+          const node = event.target;
+          commitScale(node, element, (patch) =>
+            updateElement(element.id, patch, { history: false }),
+          );
+          updateElement(element.id, { x: node.x(), y: node.y() });
+        }}
+        draggable={draggable}
+      />
+    );
+  }
+
   return (
     <Text
       {...(common as Konva.TextConfig)}
@@ -399,6 +449,32 @@ function ImageBlock({ element, common, nodeRef }: BlockProps<ImageElement>) {
     node.getLayer()?.batchDraw();
   }, [nodeRef, filter, element.filters, element.width, element.height, element.crop, image]);
 
+  if (hasImageMask(element)) {
+    return (
+      <Shape
+        {...(common as Konva.ShapeConfig)}
+        ref={nodeRef as React.RefObject<Konva.Shape>}
+        width={element.width}
+        height={element.height}
+        sceneFunc={(ctx, shape) => {
+          drawMaskedImage(rawCtx(ctx), image, element);
+          ctx.beginPath();
+          ctx.rect(0, 0, element.width, element.height);
+          ctx.closePath();
+          ctx.fillStrokeShape(shape);
+        }}
+        fill="rgba(0,0,0,0)"
+        onTransformEnd={(event) => {
+          const node = event.target;
+          commitScale(node, element, (patch) =>
+            updateElement(element.id, patch, { history: false }),
+          );
+          updateElement(element.id, { x: node.x(), y: node.y() });
+        }}
+      />
+    );
+  }
+
   return (
     <KonvaImage
       {...(common as Konva.ImageConfig)}
@@ -461,6 +537,59 @@ function TableBlock({ element, common, nodeRef }: BlockProps<TableElement>) {
         const node = event.target;
         node.scaleX(1);
         node.scaleY(1);
+        updateElement(element.id, { x: node.x(), y: node.y() });
+      }}
+    />
+  );
+}
+
+function PathBlock({ element, common, nodeRef }: BlockProps<PathElement>) {
+  const updateElement = useEditorStore((state) => state.updateElement);
+  const isHighlighter = element.brush === 'highlighter';
+  return (
+    <Line
+      {...(common as Konva.LineConfig)}
+      ref={nodeRef as React.RefObject<Konva.Line>}
+      points={element.points}
+      stroke={element.stroke}
+      strokeWidth={element.strokeWidth}
+      opacity={isHighlighter ? element.opacity * 0.45 : element.opacity}
+      tension={0.4}
+      lineCap="round"
+      lineJoin="round"
+      hitStrokeWidth={Math.max(element.strokeWidth * 2, 18)}
+      onTransformEnd={(event) => {
+        const node = event.target;
+        commitScale(node, element, (patch) =>
+          updateElement(element.id, patch, { history: false }),
+        );
+        updateElement(element.id, { x: node.x(), y: node.y() });
+      }}
+    />
+  );
+}
+
+function MediaBlock({ element, common, nodeRef }: BlockProps<MediaElement>) {
+  const updateElement = useEditorStore((state) => state.updateElement);
+  return (
+    <Shape
+      {...(common as Konva.ShapeConfig)}
+      ref={nodeRef as React.RefObject<Konva.Shape>}
+      width={element.width}
+      height={element.height}
+      sceneFunc={(ctx, shape) => {
+        drawMediaElement(rawCtx(ctx), element);
+        ctx.beginPath();
+        ctx.rect(0, 0, element.width, element.height);
+        ctx.closePath();
+        ctx.fillStrokeShape(shape);
+      }}
+      fill="rgba(0,0,0,0)"
+      onTransformEnd={(event) => {
+        const node = event.target;
+        commitScale(node, element, (patch) =>
+          updateElement(element.id, patch, { history: false }),
+        );
         updateElement(element.id, { x: node.x(), y: node.y() });
       }}
     />

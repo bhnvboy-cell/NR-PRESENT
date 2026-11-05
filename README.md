@@ -8,7 +8,13 @@ A Canva / Google-Slides-style presentation editor for the web — React + Konva 
 
 ### Editor
 - **Canvas** — drag, resize, rotate, multi-select marquee, grouping, locking, layers panel, smart snapping + guides, grid & rulers, zoom/pan
-- **Elements** — text, 9 shapes, lines/arrows, images (crop presets, filters, corner radius), charts (single-series bar/line/pie/donut/area), tables, 96 icons, 28 decorative graphics, 56 emoji
+- **Elements** — text, 9 shapes, lines/arrows, freehand brush strokes, images (crop presets, filters, corner radius, shape masks & device frames), video & audio embeds, charts (single-series bar/line/pie/donut/area), tables, 96 icons, 28 decorative graphics, 56 emoji
+- **Curved Text & Text Effects** — circular arc text (`-180°` to `+180°`), Canva-style text effects (`Neon`, `Hollow`, `Splice`, `Echo`, `Lift`), and custom text outlines
+- **Image Frames & Device Mockups** — mask any image into shape frames (`Circle`, `Arch`, `Diamond`, `Triangle`, `Hexagon`, `Star`, `Heart`) or device mockups (`Laptop`, `Phone`, `Browser`)
+- **Video & Audio Media** — embed MP4/WebM/YouTube videos and audio tracks (including built-in synthesized WAV tracks) with live playback in both the editor and Present Mode
+- **Freehand Draw / Pen Tool (`B` / `P`)** — draw smooth freehand strokes directly on slides with `Pen`, `Marker`, and `Highlighter` brushes
+- **AI Magic Studio (`✨`)** — **Magic Design** generates tailored 5-slide decks or single slides from any prompt and visual theme; **Magic Write** rewrites selected text (punchy headline, executive polish, expand, shorten, bulletize, or translate)
+- **Real-Time Collaboration & Comments (`💬`)** — pin comment badges to slides, reply/resolve threads, and sync live collaborator cursors and slide edits across browser tabs/windows in real time
 - **22 slide templates + 5 full deck templates** (pitch deck, QBR, lesson, marketing plan, portfolio) with search
 - **20 color palettes** — harmony-based generator with one-click apply
 - **Animations & transitions** — per-element entrances, per-slide transitions, presenter timers
@@ -99,7 +105,7 @@ Open the app, choose **Create account**, or use the seeded demo:
 - Email: `demo@nr.test`
 - Password: `secret123`
 
-(Only exists if the dev database was seeded — otherwise register your own; the first account adopts any existing anonymous projects.)
+(Only exists if the dev database was seeded — otherwise register your own, or click **⚡ Continue in Local Studio Mode** on the sign-in screen to use the full editor offline without PostgreSQL.)
 
 ## Keyboard shortcuts
 
@@ -107,7 +113,7 @@ Press **F1** in the app for the full cheat sheet.
 
 | Keys | Action |
 | --- | --- |
-| `V T R O L A I H` | Tools (select, text, shapes, line, arrow, image, hand) |
+| `V T B R O L A I H` | Tools (select, text, draw/pen, shapes, line, arrow, image, hand) |
 | `Ctrl+Z / Ctrl+Y` | Undo / redo |
 | `Ctrl+C / X / V` | Copy / cut / paste |
 | `Ctrl+D / Ctrl+A / Ctrl+G` | Duplicate / select all / group |
@@ -124,15 +130,16 @@ Press **F1** in the app for the full cheat sheet.
 ```
 src/
   components/
-    canvas/          # Konva stage, elements, present mode, rulers
-    panels/          # Projects, layers, templates, elements, palette
+    canvas/          # Konva stage, elements, media overlay, present mode, rulers
+    panels/          # Projects, layers, templates, elements, palette, magic AI, comments
     common/          # ColorField, NumberField
     *.tsx            # Toolbar, slide rail, properties sidebar, overlays
   data/              # Templates, deck templates, icons, graphics, fonts
+  hooks/             # Keyboard shortcuts, real-time BroadcastChannel collaboration
   persistence/       # ProjectApi (local + REST), authApi
   store/             # Zustand stores (editor, canvas UI, auth)
   types/             # Editor data model
-  utils/             # Export, snap, chart/table drawing, palettes
+  utils/             # Export, snap, chart/table drawing, text effects, image masks, media, palettes
 backend/NR.Presentation.Api/
   Auth/              # PBKDF2 hasher, session cookie, auth endpoints
   Data/              # EF Core DbContext, schema migrator, bootstrapper

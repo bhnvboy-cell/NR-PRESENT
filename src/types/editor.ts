@@ -19,6 +19,7 @@ export const SLIDE_SIZE_PRESETS: { label: string; size: SlideSize }[] = [
 export type EditorTool =
   | 'select'
   | 'text'
+  | 'pen'
   | 'rect'
   | 'ellipse'
   | 'line'
@@ -79,6 +80,7 @@ export interface AnimationProps {
 export type TextAlignment = 'left' | 'center' | 'right' | 'justify';
 export type TextDecoration = 'none' | 'underline' | 'line-through';
 export type FontWeight = 300 | 400 | 500 | 600 | 700 | 800 | 900;
+export type TextEffectKind = 'none' | 'neon' | 'hollow' | 'splice' | 'echo' | 'lift';
 
 export interface TextElement extends BaseElement {
   type: 'text';
@@ -92,6 +94,14 @@ export interface TextElement extends BaseElement {
   lineHeight: number;
   letterSpacing: number;
   decoration: TextDecoration;
+  /** Canva-style text effect preset. */
+  effect?: TextEffectKind;
+  /** Arc angle in degrees (-180..180); 0 or undefined = straight text. */
+  curve?: number;
+  /** Optional text outline stroke color. */
+  stroke?: string;
+  /** Optional text outline stroke width. */
+  strokeWidth?: number;
 }
 
 export type ShapeKind =
@@ -135,6 +145,19 @@ export interface ImageFilters {
   preset: ImageFilterPreset;
 }
 
+export type ImageMaskKind =
+  | 'none'
+  | 'circle'
+  | 'diamond'
+  | 'triangle'
+  | 'hexagon'
+  | 'star'
+  | 'heart'
+  | 'arch'
+  | 'laptop'
+  | 'phone'
+  | 'browser';
+
 export interface ImageElement extends BaseElement {
   type: 'image';
   src: string;
@@ -142,6 +165,34 @@ export interface ImageElement extends BaseElement {
   filters: ImageFilters;
   /** Optional source crop in natural-image pixels (Konva `crop` rect). */
   crop?: { x: number; y: number; width: number; height: number };
+  /** Canva-style shape mask or device frame mockup. */
+  mask?: ImageMaskKind;
+  /** Bezel / accent color for device frames or masked borders. */
+  frameColor?: string;
+}
+
+export type BrushKind = 'pen' | 'marker' | 'highlighter';
+
+export interface PathElement extends BaseElement {
+  type: 'path';
+  /** Flat [x0, y0, x1, y1, ...] coordinates relative to (x, y). */
+  points: number[];
+  stroke: string;
+  strokeWidth: number;
+  brush: BrushKind;
+}
+
+export type MediaKind = 'video' | 'audio';
+
+export interface MediaElement extends BaseElement {
+  type: 'media';
+  mediaType: MediaKind;
+  src: string;
+  title: string;
+  autoplay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+  posterColor?: string;
 }
 
 export type ChartType = 'bar' | 'line' | 'area' | 'pie' | 'donut';
@@ -193,7 +244,35 @@ export type SlideTransition =
   | 'zoom'
   | 'dissolve';
 
-export type CanvasElement = TextElement | ShapeElement | ImageElement | ChartElement | TableElement;
+export type CanvasElement =
+  | TextElement
+  | ShapeElement
+  | ImageElement
+  | ChartElement
+  | TableElement
+  | PathElement
+  | MediaElement;
+
+export interface CommentReply {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface SlideComment {
+  id: string;
+  slideId: string;
+  author: string;
+  authorColor?: string;
+  text: string;
+  createdAt: string;
+  resolved?: boolean;
+  /** Optional pin coordinate on the slide (in slide px). */
+  x?: number;
+  y?: number;
+  replies?: CommentReply[];
+}
 
 export type SlideBackground =
   | { kind: 'solid'; color: string }
@@ -236,6 +315,7 @@ export interface Project {
   viewport: ViewportSettings;
   slideSize: SlideSize;
   brandKit?: BrandKit;
+  comments?: SlideComment[];
 }
 
 export const DEFAULT_SHADOW: ShadowProps = {
@@ -413,3 +493,26 @@ export const DEFAULT_ANIMATION: AnimationProps = {
   duration: 500,
   delay: 0,
 };
+
+export const TEXT_EFFECT_OPTIONS: { value: TextEffectKind; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'neon', label: 'Neon' },
+  { value: 'hollow', label: 'Hollow' },
+  { value: 'splice', label: 'Splice' },
+  { value: 'echo', label: 'Echo' },
+  { value: 'lift', label: 'Lift' },
+];
+
+export const IMAGE_MASK_OPTIONS: { value: ImageMaskKind; label: string; category: 'shape' | 'device' }[] = [
+  { value: 'none', label: 'None', category: 'shape' },
+  { value: 'circle', label: 'Circle', category: 'shape' },
+  { value: 'arch', label: 'Arch', category: 'shape' },
+  { value: 'diamond', label: 'Diamond', category: 'shape' },
+  { value: 'triangle', label: 'Triangle', category: 'shape' },
+  { value: 'hexagon', label: 'Hexagon', category: 'shape' },
+  { value: 'star', label: 'Star', category: 'shape' },
+  { value: 'heart', label: 'Heart', category: 'shape' },
+  { value: 'laptop', label: 'Laptop', category: 'device' },
+  { value: 'phone', label: 'Phone', category: 'device' },
+  { value: 'browser', label: 'Browser', category: 'device' },
+];

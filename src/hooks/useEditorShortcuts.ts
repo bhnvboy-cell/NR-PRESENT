@@ -7,6 +7,8 @@ import type { EditorTool } from '../types/editor';
 const TOOL_SHORTCUTS: Record<string, EditorTool> = {
   v: 'select',
   t: 'text',
+  b: 'pen',
+  p: 'pen',
   r: 'rect',
   o: 'ellipse',
   l: 'line',

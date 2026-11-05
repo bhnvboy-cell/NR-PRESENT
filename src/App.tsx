@@ -9,6 +9,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { FindOverlay } from './components/FindOverlay';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { useEditorShortcuts } from './hooks/useEditorShortcuts';
+import { useRealtimeCollab } from './hooks/useRealtimeCollab';
 import { ensureFontsLoaded } from './data/fonts';
 import {
   fetchSharedPresentation,
@@ -27,6 +28,7 @@ const AUTOSAVE_DELAY = 700;
 
 export default function App() {
   useEditorShortcuts();
+  useRealtimeCollab();
   const hydrated = useRef(false);
 
   const shareToken = useMemo(() => new URLSearchParams(window.location.search).get('view'), []);
