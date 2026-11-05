@@ -2,7 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A Canva / Google-Slides-style presentation editor for the web — React + Konva on the front, a .NET 10 + PostgreSQL API on the back. Build slides with real design tooling (charts, tables, icons, animations), present with speaker view, export to PNG/PDF/PowerPoint, and share read-only links with cloud accounts.
+## About
+
+**NR Presentation** is a full-stack Canva & Google Slides alternative built with **React 19**, **TypeScript**, **Konva**, **.NET 10**, and **PostgreSQL**. It combines rich visual design tooling—curved text, neon/hollow/splice text effects, shape masks, laptop/phone/browser device mockups, freehand brushes, native charts, tables, and video/audio embeds—with AI-assisted slide generation (**Magic Studio**), real-time multi-tab collaboration & slide comments, fullscreen presenter view with laser pointer & speaker notes, and one-click export to PNG, PDF, and PowerPoint (`.pptx`).
 
 ## Features
 
